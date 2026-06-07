@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Nunito:wght@400;500;600;700;800;900&display=swap');
+
+/* stylelint-disable at-rule-no-unknown */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* stylelint-enable at-rule-no-unknown */
+
+:root {
+  --cream:        #FFF8F0;
+  --surface:      #FFFFFF;
+  --primary:      #D4603A;
+  --primary-dark: #B8461F;
+  --primary-light:#F5D5C8;
+  --secondary:    #7B5EA7;
+  --secondary-lt: #E8E3F5;
+  --accent:       #F0B429;
+  --accent-lt:    #FEF3C7;
+  --text:         #2C1810;
+  --text-muted:   #78614E;
+  --border:       #F0D9CA;
+  --success:      #2D8A4E;
+  --success-lt:   #D1FAE5;
+  --error:        #C0392B;
+  --error-lt:     #FEE2E2;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background-color: var(--cream);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, .font-serif { font-family: 'DM Serif Display', Georgia, serif; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--cream); }
+::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+/* ── Custom component classes ── */
+/* stylelint-disable at-rule-no-unknown */
+@layer components {
+  .btn-primary {
+    @apply bg-terracotta-500 text-white font-bold px-6 py-3 rounded-2xl
+           hover:bg-terracotta-600 active:scale-95 transition-all duration-150
+           shadow-warm disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply bg-violet-500 text-white font-bold px-6 py-3 rounded-2xl
+           hover:bg-violet-600 active:scale-95 transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-outline {
+    @apply border-2 border-terracotta-500 text-terracotta-500 font-bold px-6 py-3 rounded-2xl
+           hover:bg-terracotta-50 active:scale-95 transition-all duration-150;
+  }
+  .btn-ghost {
+    @apply text-terracotta-500 font-bold px-4 py-2 rounded-xl
+           hover:bg-terracotta-50 active:scale-95 transition-all duration-150;
+  }
+  .card {
+    @apply bg-white rounded-3xl shadow-card border border-terracotta-100 p-6;
+  }
+  .input {
+    @apply w-full border border-terracotta-200 rounded-xl px-4 py-3
+           font-sans text-sm text-[var(--text)] bg-white
+           focus:outline-none focus:ring-2 focus:ring-terracotta-400 focus:border-transparent
+           placeholder:text-[var(--text-muted)] transition;
+  }
+  .label {
+    @apply block text-sm font-bold text-[var(--text-muted)] mb-1.5;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold;
+  }
+  .badge-active   { @apply badge bg-green-100 text-green-700; }
+  .badge-draft    { @apply badge bg-amber-100 text-amber-700; }
+  .badge-closed   { @apply badge bg-gray-100 text-gray-600; }
+  .badge-flagged  { @apply badge bg-red-100 text-red-700; }
+  .badge-passed   { @apply badge bg-green-100 text-green-700; }
+  .badge-failed   { @apply badge bg-red-100 text-red-700; }
+}
+/* stylelint-enable at-rule-no-unknown */
+
+/* ── Page enter animation ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fadeUp 0.45s ease forwards; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in { animation: fadeIn 0.3s ease forwards; }
+
+/* ── Quiz timer pulse ── */
+@keyframes timerPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+.timer-urgent { animation: timerPulse 1s ease-in-out infinite; }
+
+/* ── Greek pattern decorative border ── */
+.greek-border {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 8px,
+    var(--primary-light) 8px,
+    var(--primary-light) 10px
+  );
+  height: 3px;
+}
+
+/* ── Responsive table ── */
+.table-container { overflow-x: auto; }
+
+/* ── Skeleton loader ── */
+@keyframes shimmer {
+  from { background-position: -200px 0; }
+  to   { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f3e8e0 25%, #f9f1ec 50%, #f3e8e0 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 8px;
+}

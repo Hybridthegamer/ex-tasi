@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment files — NEVER commit these
+backend/.env
+frontend/.env
+
+# Build output
+frontend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# CLAUDE
+.claude/
