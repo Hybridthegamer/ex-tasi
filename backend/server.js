@@ -10,10 +10,14 @@ connectDB();
 
 const app = express();
 const server = http.createServer(app);
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  'http://localhost:5173'
+].filter(Boolean);
 
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
@@ -21,7 +25,11 @@ const io = new Server(server, {
 
 // Middleware
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
