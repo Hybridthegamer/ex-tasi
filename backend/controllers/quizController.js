@@ -97,8 +97,17 @@ exports.updateQuiz = async (req, res) => {
   try {
     const quiz = await Quiz.findOne({ _id: req.params.id, tutor: req.user._id });
     if (!quiz) return res.status(404).json({ message: 'Quiz not found.' });
+
+    // A published (active) quiz may still be edited, but only while no student
+    // has taken it yet. Once submissions exist, editing the questions would
+    // corrupt results that have already been recorded — so it's locked.
     if (quiz.status === 'active') {
-      return res.status(400).json({ message: 'Cannot edit an active quiz. Close it first.' });
+      const submissionCount = await Submission.countDocuments({ quiz: quiz._id });
+      if (submissionCount > 0) {
+        return res.status(400).json({
+          message: 'Cannot edit a published quiz once students have started or submitted it. Close it first.'
+        });
+      }
     }
 
     const allowed = [
