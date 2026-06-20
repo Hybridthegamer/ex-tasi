@@ -112,7 +112,7 @@ export default function QuizDetails() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              {quiz.status === 'draft' && (
+              {(quiz.status === 'draft' || (quiz.status === 'active' && submissions.length === 0)) && (
                 <Link to={`/tutor/quiz/${id}/edit`} className="btn-outline text-sm flex items-center gap-1.5">
                   <Edit size={14} /> Edit
                 </Link>

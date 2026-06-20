@@ -40,6 +40,7 @@ export default function CreateQuiz() {
   const [success, setSuccess] = useState('');
   const [quizId, setQuizId]   = useState(id || null);
   const [published, setPublished] = useState(null);
+  const [justPublished, setJustPublished] = useState(false);
 
   const [details, setDetails] = useState({ title: '', description: '', instructions: '' });
   const [questions, setQuestions] = useState([]);
@@ -117,6 +118,7 @@ export default function CreateQuiz() {
     try {
       const result = await quizAPI.publish(quizId, { deadline: settings.deadline || undefined });
       setPublished({ accessCode: result.accessCode, status: 'active' });
+      setJustPublished(true);
       setSuccess('Quiz published successfully!');
     } catch (err) {
       setError(err.message || 'Failed to publish.');
@@ -128,6 +130,13 @@ export default function CreateQuiz() {
   const saveAndExit = async () => {
     const ok = await saveDraft();
     if (ok) navigate('/tutor');
+  };
+
+  // Persist edits to an already-published quiz without re-publishing it.
+  const saveChanges = async () => {
+    setSuccess('');
+    const ok = await saveDraft();
+    if (ok) setSuccess('Changes saved. Students will see the updated quiz.');
   };
 
   const totalPoints = questions.reduce((s, q) => s + (Number(q.points) || 0), 0);
@@ -289,7 +298,7 @@ export default function CreateQuiz() {
               </div>
             </div>
 
-            {published?.accessCode ? (
+            {justPublished ? (
               <div className="card bg-green-50 border-green-200 text-center">
                 <CheckCircle size={32} className="text-green-500 mx-auto mb-3" />
                 <h3 className="font-serif text-2xl text-[var(--text)] mb-2">Quiz is Live!</h3>
@@ -305,6 +314,30 @@ export default function CreateQuiz() {
                   </button>
                   <button onClick={() => navigate(`/tutor/quiz/${quizId}`)} className="btn-primary text-sm">
                     View Details →
+                  </button>
+                </div>
+              </div>
+            ) : published?.accessCode ? (
+              <div className="card border-terracotta-200 text-center">
+                <Rocket size={32} className="text-terracotta-400 mx-auto mb-3" />
+                <h3 className="font-serif text-xl text-[var(--text)] mb-2">This quiz is already published</h3>
+                <p className="text-sm text-[var(--text-muted)] mb-4">
+                  Save your edits to update it in place — the access code below stays the same and students
+                  will see the changes immediately.
+                </p>
+                <div className="inline-flex items-center gap-3 bg-terracotta-50 border-2 border-terracotta-200 rounded-2xl px-6 py-3 mb-5">
+                  <span className="font-mono text-2xl font-extrabold tracking-[0.25em] text-terracotta-600">
+                    {published.accessCode}
+                  </span>
+                </div>
+                <div className="flex gap-3 justify-center">
+                  <button onClick={() => navigate(`/tutor/quiz/${quizId}`)} className="btn-outline text-sm">
+                    View Details →
+                  </button>
+                  <button onClick={saveChanges} disabled={saving}
+                    className="btn-primary text-sm flex items-center gap-2">
+                    {saving ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save size={14} />}
+                    {saving ? 'Saving…' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -336,7 +369,7 @@ export default function CreateQuiz() {
         )}
 
         {/* Nav buttons */}
-        {!published?.accessCode && (
+        {!justPublished && (
           <div className="flex items-center justify-between mt-6">
             <button onClick={step === 1 ? () => navigate('/tutor') : back}
               className="btn-ghost flex items-center gap-1.5 text-sm">
