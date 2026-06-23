@@ -136,3 +136,8 @@ h1, h2, h3, .font-serif { font-family: 'DM Serif Display', Georgia, serif; }
   animation: shimmer 1.4s infinite;
   border-radius: 8px;
 }
+
+/* ── Exam security: block printing during quiz ── */
+@media print {
+  .no-print { display: none !important; }
+}

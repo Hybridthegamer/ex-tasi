@@ -7,7 +7,14 @@ const proctorEventSchema = new mongoose.Schema({
   events: [{
     type: {
       type: String,
-      enum: ['joined', 'tab_switch', 'focus_loss', 'paste_attempt', 'submitted', 'auto_submitted', 'warning_received', 'reconnected']
+      enum: [
+        'joined', 'tab_switch', 'focus_loss', 'paste_attempt',
+        'copy_attempt', 'screenshot_attempt', 'print_attempt',
+        'screen_share_attempt', 'fullscreen_exit', 'right_click_attempt',
+        'devtools_attempt', 'submitted', 'auto_submitted',
+        'warning_received', 'reconnected', 'disconnected',
+        'flagged', 'kicked'
+      ]
     },
     timestamp: { type: Date, default: Date.now },
     details: { type: String, default: '' }
