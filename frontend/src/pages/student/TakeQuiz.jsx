@@ -451,7 +451,6 @@ export default function TakeQuiz() {
   }).length;
 
   return (
-    {/* select-none prevents text selection; no-print hides content from print dialog */}
     <div className="min-h-screen bg-cream flex flex-col select-none no-print">
 
       {/* Kicked notification (auto-submitting) */}
