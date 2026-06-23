@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { AlertTriangle, ChevronLeft, ChevronRight, Send, Upload, CheckCircle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Send, Upload, CheckCircle, Maximize, ShieldAlert } from 'lucide-react';
 import Timer from '../../components/Timer';
 import { submissionAPI } from '../../services/api';
 import { uploadFile } from '../../services/upload';
@@ -174,14 +174,35 @@ export default function TakeQuiz() {
   const [submitting, setSubmitting]         = useState(false);
   const [submitted, setSubmitted]           = useState(false);
   const [showConfirm, setShowConfirm]       = useState(false);
-  const [warningToast, setWarningToast]     = useState('');
-  const [sessionLost]                       = useState(!stateQuestions);
+  const [warningToast, setWarningToast]         = useState('');
+  const [kickedToast, setKickedToast]           = useState('');
+  const [fullscreenBanner, setFullscreenBanner] = useState(false);
+  const [fullscreenPrompt, setFullscreenPrompt] = useState(false);
+  const [sessionLost]                           = useState(!stateQuestions);
 
-  const socketRef  = useRef(null);
-  const saveTimers = useRef({});
-  const hasJoined  = useRef(false);
+  const socketRef   = useRef(null);
+  const saveTimers  = useRef({});
+  const hasJoined   = useRef(false);
+  const submitRef   = useRef(null); // stable ref to doSubmit for use in event listeners
 
-  // ── Socket ──
+  // ── Request fullscreen on mount ─────────────────────────────────────────
+  useEffect(() => {
+    if (sessionLost || !questions.length) return;
+
+    const requestFS = () => {
+      const el = document.documentElement;
+      const promise = el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.() ?? el.mozRequestFullScreen?.();
+      if (promise && typeof promise.then === 'function') {
+        promise.catch(() => setFullscreenPrompt(true));
+      }
+    };
+
+    // Brief delay so the page is painted before attempting fullscreen
+    const t = setTimeout(requestFS, 400);
+    return () => clearTimeout(t);
+  }, [sessionLost, questions.length]);
+
+  // ── Socket ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!quizId || !isLive || submitted || sessionLost) return;
     const token  = localStorage.getItem('exetasi_token');
@@ -196,57 +217,152 @@ export default function TakeQuiz() {
     });
     socket.on('tutor:warning', ({ message }) => {
       setWarningToast(message);
-      setTimeout(() => setWarningToast(''), 6000);
+      setTimeout(() => setWarningToast(''), 8000);
+    });
+    socket.on('tutor:kicked', ({ reason }) => {
+      setKickedToast(reason || 'You have been removed from this exam by the tutor.');
+      // Auto-submit after a short delay to allow the message to be read
+      setTimeout(() => submitRef.current?.(true), 3000);
     });
 
     return () => { socket.disconnect(); socketRef.current = null; };
   }, [quizId, submissionId, isLive, submitted, sessionLost]);
 
-  // ── Proctoring event logger ──
+  // ── Proctoring event logger ─────────────────────────────────────────────
   const logEvent = useCallback((eventType, details) => {
     if (submitted || sessionLost) return;
-    // Live: socket (backend persists + notifies tutor)
     if (isLive && socketRef.current?.connected) {
       socketRef.current.emit('student:activity', { eventType, details });
     } else {
-      // Non-live: REST only
       submissionAPI.logProctor(submissionId, { eventType, details }).catch(() => {});
     }
   }, [submissionId, isLive, submitted, sessionLost]);
 
-  // ── Browser event listeners for tab/focus/paste detection ──
+  // ── Anti-malpractice: tab / focus / paste / keyboard / context menu ─────
   useEffect(() => {
     if (!submissionId || submitted || sessionLost) return;
 
-    // visibilitychange fires when the tab is hidden (switched, minimised, etc.)
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         logEvent('tab_switch', 'Student switched to another tab or minimised window');
       }
     };
 
-    // blur fires when the browser window loses focus (alt-tab, click elsewhere)
-    const onBlur = () => {
-      logEvent('focus_loss', 'Browser window lost focus');
-    };
+    const onBlur = () => logEvent('focus_loss', 'Browser window lost focus');
 
-    // paste fires on any paste attempt — capture phase to catch all inputs
-    const onPaste = () => {
+    const onPaste = (e) => {
+      // Allow paste only inside textarea/input elements (essay / short_answer)
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag !== 'textarea' && tag !== 'input') {
+        e.preventDefault();
+      }
       logEvent('paste_attempt', 'Paste action attempted');
     };
+
+    const onCopy = (e) => {
+      e.preventDefault();
+      logEvent('copy_attempt', 'Copy action blocked');
+    };
+
+    const onCut = (e) => {
+      e.preventDefault();
+      logEvent('copy_attempt', 'Cut action blocked');
+    };
+
+    const onContextMenu = (e) => {
+      e.preventDefault();
+      logEvent('right_click_attempt', 'Right-click context menu blocked');
+    };
+
+    const onKeyDown = (e) => {
+      // PrintScreen
+      if (e.key === 'PrintScreen') {
+        e.preventDefault();
+        logEvent('screenshot_attempt', 'PrintScreen key blocked');
+        return;
+      }
+      // Ctrl+P (print)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        logEvent('print_attempt', 'Ctrl+P (print) blocked');
+        return;
+      }
+      // Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C (DevTools)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['I','i','J','j','C','c'].includes(e.key)) {
+        e.preventDefault();
+        logEvent('devtools_attempt', 'DevTools keyboard shortcut blocked');
+        return;
+      }
+      // F12
+      if (e.key === 'F12') {
+        e.preventDefault();
+        logEvent('devtools_attempt', 'F12 (DevTools) blocked');
+        return;
+      }
+      // Ctrl+U (view source)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault();
+        logEvent('devtools_attempt', 'Ctrl+U (view source) blocked');
+        return;
+      }
+      // Ctrl+S (save as — some users try to save the page to capture content)
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        logEvent('screenshot_attempt', 'Ctrl+S (save page) blocked');
+        return;
+      }
+    };
+
+    const onFullscreenChange = () => {
+      const isFS =
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement;
+      if (!isFS) {
+        logEvent('fullscreen_exit', 'Student exited fullscreen mode');
+        setFullscreenBanner(true);
+      } else {
+        setFullscreenBanner(false);
+      }
+    };
+
+    // Intercept getDisplayMedia to detect screen sharing via browser
+    const patchScreenShare = () => {
+      if (!navigator.mediaDevices?.getDisplayMedia) return;
+      const original = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getDisplayMedia = (...args) => {
+        logEvent('screen_share_attempt', 'Browser screen sharing attempted');
+        return original(...args);
+      };
+    };
+    patchScreenShare();
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('blur', onBlur);
     document.addEventListener('paste', onPaste, true);
+    document.addEventListener('copy', onCopy, true);
+    document.addEventListener('cut', onCut, true);
+    document.addEventListener('contextmenu', onContextMenu);
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+    document.addEventListener('mozfullscreenchange', onFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('blur', onBlur);
       document.removeEventListener('paste', onPaste, true);
+      document.removeEventListener('copy', onCopy, true);
+      document.removeEventListener('cut', onCut, true);
+      document.removeEventListener('contextmenu', onContextMenu);
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', onFullscreenChange);
     };
   }, [logEvent, submitted, sessionLost, submissionId]);
 
-  // ── Debounced answer save ──
+  // ── Debounced answer save ───────────────────────────────────────────────
   const saveAnswer = useCallback((questionId, answer) => {
     clearTimeout(saveTimers.current[questionId]);
     saveTimers.current[questionId] = setTimeout(() => {
@@ -259,7 +375,7 @@ export default function TakeQuiz() {
     saveAnswer(questionId, answer);
   }, [saveAnswer]);
 
-  // ── Submit ──
+  // ── Submit ──────────────────────────────────────────────────────────────
   const doSubmit = useCallback(async (autoSubmitted = false) => {
     if (submitting || submitted) return;
     setSubmitting(true); setShowConfirm(false);
@@ -275,6 +391,8 @@ export default function TakeQuiz() {
       if (isLive && socketRef.current?.connected && quizId) {
         socketRef.current.emit('student:submitted', { quizId });
       }
+      // Exit fullscreen on submission
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       navigate(`/student/result/${submissionId}`, { state: { results: result.results }, replace: true });
     } catch (err) {
       setSubmitting(false);
@@ -282,7 +400,23 @@ export default function TakeQuiz() {
     }
   }, [submitting, submitted, answers, submissionId, isLive, quizId, navigate]);
 
+  // Keep a stable ref so the kicked socket listener can always call the latest doSubmit
+  useEffect(() => { submitRef.current = doSubmit; }, [doSubmit]);
+
   const handleTimerExpire = useCallback(() => { doSubmit(true); }, [doSubmit]);
+
+  const reenterFullscreen = () => {
+    const el = document.documentElement;
+    const promise = el.requestFullscreen?.() ?? el.webkitRequestFullscreen?.() ?? el.mozRequestFullScreen?.();
+    if (promise && typeof promise.then === 'function') {
+      promise
+        .then(() => { setFullscreenBanner(false); setFullscreenPrompt(false); })
+        .catch(() => {});
+    } else {
+      setFullscreenBanner(false);
+      setFullscreenPrompt(false);
+    }
+  };
 
   if (sessionLost) return (
     <div className="min-h-screen bg-cream flex items-center justify-center px-4">
@@ -317,10 +451,50 @@ export default function TakeQuiz() {
   }).length;
 
   return (
-    <div className="min-h-screen bg-cream flex flex-col">
+    <div className="min-h-screen bg-cream flex flex-col select-none no-print">
+
+      {/* Kicked notification (auto-submitting) */}
+      {kickedToast && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] px-4">
+          <div className="bg-white rounded-3xl shadow-warm-lg p-8 w-full max-w-sm text-center">
+            <ShieldAlert size={40} className="text-red-500 mx-auto mb-4" />
+            <h3 className="font-serif text-xl text-[var(--text)] mb-2">Removed from Exam</h3>
+            <p className="text-sm text-[var(--text-muted)]">{kickedToast}</p>
+            <p className="text-xs text-amber-600 font-semibold mt-3">Your answers are being submitted…</p>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen prompt (initial) */}
+      {fullscreenPrompt && !fullscreenBanner && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-amber-500 text-white px-4 py-3 flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Maximize size={16} />
+            This exam requires fullscreen mode. Please click the button to enter fullscreen.
+          </div>
+          <button onClick={reenterFullscreen}
+            className="flex items-center gap-1.5 text-sm font-bold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-xl transition-colors shrink-0">
+            <Maximize size={14} /> Enter Fullscreen
+          </button>
+        </div>
+      )}
+
+      {/* Fullscreen exit banner */}
+      {fullscreenBanner && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white px-4 py-3 flex items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <ShieldAlert size={16} />
+            You exited fullscreen — this has been recorded. Please return to fullscreen to continue.
+          </div>
+          <button onClick={reenterFullscreen}
+            className="flex items-center gap-1.5 text-sm font-bold bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-xl transition-colors shrink-0">
+            <Maximize size={14} /> Return to Fullscreen
+          </button>
+        </div>
+      )}
 
       {/* Top bar */}
-      <div className="bg-white border-b border-terracotta-100 shadow-card sticky top-0 z-40">
+      <div className={`bg-white border-b border-terracotta-100 shadow-card sticky z-40 ${(fullscreenBanner || fullscreenPrompt) ? 'top-14' : 'top-0'}`}>
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <p className="font-serif text-base text-[var(--text)] truncate">{quizTitle}</p>

@@ -40,6 +40,8 @@ module.exports = (io) => {
     socket.on('student:join', async ({ quizId, submissionId }) => {
       if (socket.user.role !== 'student') return;
       socket.join(`quiz:${quizId}`);
+      // Per-student room for targeted warnings and kick
+      socket.join(`quiz:${quizId}:student:${userId}`);
       socket.quizId = quizId;
       socket.submissionId = submissionId;
 
@@ -65,10 +67,10 @@ module.exports = (io) => {
           { upsert: true }
         );
 
-        // Update submission counters
+        // Update submission counters for key violation types
         if (socket.submissionId) {
           const update = {};
-          if (eventType === 'tab_switch') update.$inc = { tabSwitches: 1 };
+          if (eventType === 'tab_switch')      update.$inc = { tabSwitches: 1 };
           else if (eventType === 'focus_loss') update.$inc = { focusLostCount: 1 };
           else if (eventType === 'paste_attempt') update.$inc = { pasteAttempts: 1 };
 
@@ -76,7 +78,7 @@ module.exports = (io) => {
             const sub = await Submission.findByIdAndUpdate(socket.submissionId, update, { new: true });
             if (sub && (sub.tabSwitches >= 3 || sub.focusLostCount >= 5)) {
               sub.flagged = true;
-              sub.flagReason = `Suspicious activity: ${sub.tabSwitches} tab switch(es)`;
+              sub.flagReason = `Suspicious activity: ${sub.tabSwitches} tab switch(es), ${sub.focusLostCount} focus loss(es)`;
               await sub.save();
               io.to(`monitor:${socket.quizId}`).emit('student:flagged', {
                 studentId: userId,
@@ -110,18 +112,101 @@ module.exports = (io) => {
       });
     });
 
-    // ─── TUTOR: Send warning to student(s) ──────────────────────────────────
+    // ─── TUTOR: Send warning (broadcast or per-student) ──────────────────────
     socket.on('tutor:warn', ({ quizId, studentId, message }) => {
       if (socket.user.role !== 'tutor') return;
-      io.to(`quiz:${quizId}`).emit('tutor:warning', {
-        message,
-        studentId,
-        timestamp: new Date()
-      });
-      io.to(`monitor:${quizId}`).emit('system:log', {
-        message: `Warning sent: "${message}"`,
-        timestamp: new Date()
-      });
+      if (studentId) {
+        // Targeted warning — only to that student's personal room
+        io.to(`quiz:${quizId}:student:${studentId}`).emit('tutor:warning', {
+          message,
+          timestamp: new Date()
+        });
+        io.to(`monitor:${quizId}`).emit('system:log', {
+          message: `Individual warning sent to student: "${message}"`,
+          studentId,
+          timestamp: new Date()
+        });
+      } else {
+        // Broadcast to all students in the quiz room
+        io.to(`quiz:${quizId}`).emit('tutor:warning', {
+          message,
+          timestamp: new Date()
+        });
+        io.to(`monitor:${quizId}`).emit('system:log', {
+          message: `Broadcast warning sent: "${message}"`,
+          timestamp: new Date()
+        });
+      }
+    });
+
+    // ─── TUTOR: Manually flag a student ─────────────────────────────────────
+    socket.on('tutor:flag', async ({ quizId, studentId, reason }) => {
+      if (socket.user.role !== 'tutor') return;
+      try {
+        const flagReason = reason || 'Manually flagged by tutor';
+
+        // Flag their most recent submission for this quiz
+        await Submission.findOneAndUpdate(
+          { quiz: quizId, student: studentId },
+          { flagged: true, flagReason },
+          { sort: { startedAt: -1 } }
+        );
+
+        // Log to ProctorEvent
+        await ProctorEvent.findOneAndUpdate(
+          { quiz: quizId, student: studentId },
+          { $push: { events: { type: 'flagged', details: flagReason } }, lastSeen: new Date() },
+          { upsert: true }
+        );
+
+        io.to(`monitor:${quizId}`).emit('student:flagged', {
+          studentId,
+          studentName: '',
+          reason: flagReason,
+          timestamp: new Date()
+        });
+        io.to(`monitor:${quizId}`).emit('system:log', {
+          message: `Student manually flagged: ${flagReason}`,
+          studentId,
+          timestamp: new Date()
+        });
+      } catch (err) {
+        console.error('Flag error:', err.message);
+      }
+    });
+
+    // ─── TUTOR: Kick a student (force-submit) ───────────────────────────────
+    socket.on('tutor:kick', async ({ quizId, studentId, reason }) => {
+      if (socket.user.role !== 'tutor') return;
+      try {
+        const kickReason = reason || 'Removed by tutor';
+
+        // Emit kick event to the specific student
+        io.to(`quiz:${quizId}:student:${studentId}`).emit('tutor:kicked', {
+          reason: kickReason,
+          timestamp: new Date()
+        });
+
+        // Log to ProctorEvent
+        await ProctorEvent.findOneAndUpdate(
+          { quiz: quizId, student: studentId },
+          { $push: { events: { type: 'kicked', details: kickReason } }, lastSeen: new Date() },
+          { upsert: true }
+        );
+
+        io.to(`monitor:${quizId}`).emit('student:kicked', {
+          studentId,
+          reason: kickReason,
+          timestamp: new Date()
+        });
+        io.to(`monitor:${quizId}`).emit('system:log', {
+          message: `Student removed from exam: ${kickReason}`,
+          studentId,
+          timestamp: new Date()
+        });
+      } catch (err) {
+        console.error('Kick error:', err.message);
+      }
     });
 
     // ─── Disconnect ──────────────────────────────────────────────────────────

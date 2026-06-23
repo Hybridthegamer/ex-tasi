@@ -287,19 +287,32 @@ exports.getResult = async (req, res) => {
     }
 
     const quiz = submission.quiz;
+    const canReviewAnswers = isTutor || (quiz.allowReview && quiz.showResultsImmediately);
 
     const answers = submission.answers.map((ans) => {
       const q = quiz.questions.id(ans.question);
+
+      if (!canReviewAnswers) {
+        // Score-only mode: expose no question text, answers, or options to the student
+        return {
+          questionId: ans.question,
+          questionType: ans.questionType,
+          score: ans.score,
+          maxScore: ans.maxScore,
+          isCorrect: ans.isCorrect,
+          isGraded: ans.isGraded,
+        };
+      }
+
       return {
         questionId: ans.question,
         questionText: q?.text || '',
         questionType: ans.questionType,
         media: q?.media || '',
+        mediaType: q?.mediaType || '',
         options: q?.options || [],
         yourAnswer: ans.answer,
-        correctAnswer: isTutor || (quiz.allowReview && quiz.showResultsImmediately)
-          ? (q?.isAutoGraded ? q?.correctAnswer : null)
-          : null,
+        correctAnswer: isTutor ? (q?.isAutoGraded ? q?.correctAnswer : null) : null,
         explanation: q?.explanation || '',
         score: ans.score,
         maxScore: ans.maxScore,
@@ -323,6 +336,9 @@ exports.getResult = async (req, res) => {
       status: submission.status,
       flagged: submission.flagged,
       tabSwitches: isTutor ? submission.tabSwitches : undefined,
+      focusLostCount: isTutor ? submission.focusLostCount : undefined,
+      pasteAttempts: isTutor ? submission.pasteAttempts : undefined,
+      allowReview: canReviewAnswers,
       answers
     });
   } catch (error) {

@@ -223,7 +223,7 @@ export default function Results() {
   );
 
   const { quizTitle, totalScore, maxPossibleScore, percentage, passed,
-    passingScore, submittedAt, startedAt, status, flagged, answers = [] } = results;
+    passingScore, submittedAt, startedAt, status, flagged, allowReview, answers = [] } = results;
 
   const duration      = fmtDuration(startedAt, submittedAt);
   const autoSubmitted = status === 'auto_submitted';
@@ -283,8 +283,8 @@ export default function Results() {
           </div>
         </div>
 
-        {/* Answer breakdown */}
-        {answers.length > 0 && (
+        {/* Answer breakdown — only when tutor has enabled allowReview */}
+        {allowReview && answers.length > 0 && answers[0]?.questionText ? (
           <div>
             <div className="flex items-center gap-2 mb-4">
               <BookOpen size={18} className="text-terracotta-500" />
@@ -297,7 +297,13 @@ export default function Results() {
               {answers.map((item, i) => <AnswerCard key={item.questionId || i} item={item} index={i} />)}
             </div>
           </div>
-        )}
+        ) : answers.length > 0 ? (
+          <div className="card text-center py-8">
+            <BookOpen size={28} className="text-terracotta-200 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-[var(--text)] mb-1">Answer review is not available for this quiz</p>
+            <p className="text-xs text-[var(--text-muted)]">Your tutor has not enabled answer review. Only your score is shown.</p>
+          </div>
+        ) : null}
 
         <div className="flex flex-col sm:flex-row gap-3 mt-8">
           <Link to="/student" className="btn-outline flex-1 flex items-center justify-center gap-2">
