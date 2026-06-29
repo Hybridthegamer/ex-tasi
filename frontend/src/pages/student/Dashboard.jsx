@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   BookOpen, CheckCircle, TrendingUp, Award,
-  Clock, ChevronRight, Plus, BarChart2, Calendar
+  Clock, ChevronRight, Plus, BarChart2, Calendar, Lock
 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import { submissionAPI, institutionAPI } from '../../services/api';
@@ -123,31 +123,48 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="divide-y divide-terracotta-50">
-                {display.map((sub) => (
-                  <Link key={sub._id} to={`/student/result/${sub._id}`}
-                    className="flex items-center gap-4 px-6 py-4 hover:bg-terracotta-50 transition-colors group">
-                    <div className={`w-12 h-12 rounded-xl border flex flex-col items-center justify-center shrink-0 ${pctBg(sub.percentage)}`}>
-                      <span className={`text-sm font-extrabold leading-none ${pctColor(sub.percentage)}`}>{sub.percentage}</span>
-                      <span className={`text-xs font-bold leading-none ${pctColor(sub.percentage)}`}>%</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-[var(--text)] truncate">{sub.quiz?.title || 'Untitled Quiz'}</p>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
-                          <Calendar size={11} /> {fmt(sub.submittedAt)}
-                        </span>
-                        <span className="text-xs text-[var(--text-muted)]">
-                          {sub.totalScore}/{sub.maxPossibleScore} pts
-                        </span>
+                {display.map((sub) => {
+                  const released = sub.resultsReleased !== false;
+                  return (
+                    <Link key={sub._id} to={`/student/result/${sub._id}`}
+                      className="flex items-center gap-4 px-6 py-4 hover:bg-terracotta-50 transition-colors group">
+                      {released ? (
+                        <div className={`w-12 h-12 rounded-xl border flex flex-col items-center justify-center shrink-0 ${pctBg(sub.percentage ?? 0)}`}>
+                          <span className={`text-sm font-extrabold leading-none ${pctColor(sub.percentage ?? 0)}`}>{sub.percentage ?? '—'}</span>
+                          <span className={`text-xs font-bold leading-none ${pctColor(sub.percentage ?? 0)}`}>%</span>
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl border border-gray-200 bg-gray-50 flex flex-col items-center justify-center shrink-0">
+                          <Lock size={16} className="text-gray-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-[var(--text)] truncate">{sub.quiz?.title || 'Untitled Quiz'}</p>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                            <Calendar size={11} /> {fmt(sub.submittedAt)}
+                          </span>
+                          {released && sub.totalScore != null && (
+                            <span className="text-xs text-[var(--text-muted)]">
+                              {sub.totalScore}/{sub.maxPossibleScore} pts
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {sub.passed ? <span className="badge-passed">Passed</span> : <span className="badge-failed">Failed</span>}
-                      {sub.flagged && <span className="badge-flagged">Flagged</span>}
-                      <ChevronRight size={16} className="text-[var(--text-muted)] group-hover:text-terracotta-500 transition-colors" />
-                    </div>
-                  </Link>
-                ))}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {released ? (
+                          sub.passed
+                            ? <span className="badge-passed">Passed</span>
+                            : <span className="badge-failed">Failed</span>
+                        ) : (
+                          <span className="badge bg-gray-100 text-gray-500 text-xs">Pending</span>
+                        )}
+                        {sub.flagged && <span className="badge-flagged">Flagged</span>}
+                        <ChevronRight size={16} className="text-[var(--text-muted)] group-hover:text-terracotta-500 transition-colors" />
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </div>

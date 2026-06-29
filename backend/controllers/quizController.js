@@ -33,7 +33,7 @@ exports.createQuiz = async (req, res) => {
 exports.getMyQuizzes = async (req, res) => {
   try {
     const quizzes = await Quiz.find({ tutor: req.user._id })
-      .select('title status accessCode deadline duration isLive totalPoints questions createdAt publishedAt')
+      .select('title status accessCode deadline duration isLive totalPoints questions createdAt publishedAt showResultsImmediately resultsReleasedAt')
       .sort({ createdAt: -1 });
 
     const enriched = await Promise.all(
@@ -113,7 +113,8 @@ exports.updateQuiz = async (req, res) => {
     const allowed = [
       'title','description','instructions','coverImage','questions','deadline',
       'duration','isLive','shuffleQuestions','shuffleOptions',
-      'showResultsImmediately','allowReview','passingScore','maxAttempts'
+      'showResultsImmediately','allowReview','passingScore','maxAttempts',
+      'resultsReleasedAt'
     ];
     allowed.forEach(field => {
       if (req.body[field] !== undefined) quiz[field] = req.body[field];

@@ -275,7 +275,7 @@ exports.getResult = async (req, res) => {
   try {
     const submission = await Submission.findById(req.params.id)
       .populate('student', 'name email')
-      .populate('quiz', 'title totalPoints passingScore showResultsImmediately questions allowReview tutor');
+      .populate('quiz', 'title totalPoints passingScore showResultsImmediately resultsReleasedAt questions allowReview tutor');
 
     if (!submission) return res.status(404).json({ message: 'Submission not found.' });
 
@@ -287,7 +287,17 @@ exports.getResult = async (req, res) => {
     }
 
     const quiz = submission.quiz;
-    const canReviewAnswers = isTutor || (quiz.allowReview && quiz.showResultsImmediately);
+
+    // Students cannot see results until the tutor releases them
+    if (!isTutor && !quiz.showResultsImmediately && !quiz.resultsReleasedAt) {
+      return res.json({
+        resultsNotYetReleased: true,
+        submittedAt: submission.submittedAt,
+        quizTitle: quiz.title
+      });
+    }
+
+    const canReviewAnswers = isTutor || (quiz.allowReview && (quiz.showResultsImmediately || !!quiz.resultsReleasedAt));
 
     const answers = submission.answers.map((ans) => {
       const q = quiz.questions.id(ans.question);
@@ -352,10 +362,26 @@ exports.getStudentHistory = async (req, res) => {
       student: req.user._id,
       status: { $ne: 'in_progress' }
     })
-      .populate('quiz', 'title totalPoints passingScore institution tutor')
+      .populate('quiz', 'title totalPoints passingScore institution tutor showResultsImmediately resultsReleasedAt')
       .sort({ submittedAt: -1 });
 
-    res.json(submissions);
+    const results = submissions.map((sub) => {
+      const quizData = sub.quiz;
+      const resultsReleased =
+        !quizData || quizData.showResultsImmediately || !!quizData.resultsReleasedAt;
+
+      const obj = sub.toObject();
+      return {
+        ...obj,
+        resultsReleased,
+        percentage:       resultsReleased ? sub.percentage       : null,
+        totalScore:       resultsReleased ? sub.totalScore       : null,
+        maxPossibleScore: resultsReleased ? sub.maxPossibleScore : null,
+        passed:           resultsReleased ? sub.passed           : null,
+      };
+    });
+
+    res.json(results);
   } catch (error) {
     res.status(500).json({ message: 'Server error.' });
   }
@@ -433,6 +459,62 @@ exports.gradeAnswer = async (req, res) => {
     await submission.save();
     res.json({ updated: true });
   } catch (error) {
+    res.status(500).json({ message: 'Server error.' });
+  }
+};
+
+exports.releaseResults = async (req, res) => {
+  try {
+    const quiz = await Quiz.findOne({ _id: req.params.quizId, tutor: req.user._id });
+    if (!quiz) return res.status(403).json({ message: 'Access denied.' });
+
+    quiz.resultsReleasedAt = new Date();
+    await quiz.save();
+
+    const { sendEmail = false } = req.body;
+    let emailsSent = 0;
+    let emailsSkipped = 0;
+
+    if (sendEmail) {
+      const submissions = await Submission.find({
+        quiz: quiz._id,
+        status: { $in: ['submitted', 'graded', 'auto_submitted'] }
+      }).populate('student', 'name email');
+
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+      const { sendResultsEmail } = require('../utils/email');
+
+      const emailResults = await Promise.allSettled(
+        submissions.map((sub) =>
+          sendResultsEmail({
+            studentName:  sub.student.name,
+            studentEmail: sub.student.email,
+            quizTitle:    quiz.title,
+            score:        sub.totalScore,
+            maxScore:     sub.maxPossibleScore,
+            percentage:   sub.percentage,
+            passed:       sub.passed,
+            passingScore: quiz.passingScore,
+            submissionId: sub._id,
+            clientUrl
+          })
+        )
+      );
+
+      emailResults.forEach((r) => {
+        if (r.status === 'fulfilled' && r.value?.sent) emailsSent++;
+        else emailsSkipped++;
+      });
+    }
+
+    res.json({
+      released: true,
+      releasedAt: quiz.resultsReleasedAt,
+      emailsSent,
+      emailsSkipped
+    });
+  } catch (error) {
+    console.error('Release results error:', error);
     res.status(500).json({ message: 'Server error.' });
   }
 };

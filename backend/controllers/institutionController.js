@@ -56,15 +56,22 @@ exports.getStudentStats = async (req, res) => {
     const submissions = await Submission.find({
       student: studentId,
       status: { $ne: 'in_progress' }
-    }).populate('quiz', 'title passingScore');
+    }).populate('quiz', 'title passingScore showResultsImmediately resultsReleasedAt');
 
     const quizzesTaken = submissions.length;
-    const passed = submissions.filter((s) => s.passed).length;
-    const avgScore = submissions.length
-      ? Number((submissions.reduce((s, sub) => s + sub.percentage, 0) / submissions.length).toFixed(1))
+
+    // Only include scores from quizzes whose results have been released
+    const released = submissions.filter((s) => {
+      const q = s.quiz;
+      return !q || q.showResultsImmediately || !!q.resultsReleasedAt;
+    });
+
+    const passed    = released.filter((s) => s.passed).length;
+    const avgScore  = released.length
+      ? Number((released.reduce((acc, sub) => acc + sub.percentage, 0) / released.length).toFixed(1))
       : 0;
-    const bestScore = submissions.length
-      ? Math.max(...submissions.map((s) => s.percentage))
+    const bestScore = released.length
+      ? Math.max(...released.map((s) => s.percentage))
       : 0;
 
     res.json({ quizzesTaken, passed, failed: quizzesTaken - passed, avgScore, bestScore });
