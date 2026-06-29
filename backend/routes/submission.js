@@ -4,7 +4,7 @@ const { requireRole } = require('../middleware/roles');
 const {
   startQuiz, saveAnswer, submitQuiz, getResult,
   getStudentHistory, getQuizSubmissions,
-  logProctoringEvent, gradeAnswer
+  logProctoringEvent, gradeAnswer, releaseResults
 } = require('../controllers/submissionController');
 
 router.use(auth);
@@ -22,5 +22,6 @@ router.get('/:id/result', getResult);
 // Tutor
 router.get('/quiz/:quizId', requireRole('tutor'), getQuizSubmissions);
 router.put('/:id/grade', requireRole('tutor'), gradeAnswer);
+router.post('/quiz/:quizId/release', requireRole('tutor'), releaseResults);
 
 module.exports = router;

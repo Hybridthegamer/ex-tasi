@@ -41,7 +41,8 @@ const quizSchema = new mongoose.Schema({
   status: { type: String, enum: ['draft', 'active', 'closed'], default: 'draft' },
   totalPoints: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
-  publishedAt: { type: Date }
+  publishedAt: { type: Date },
+  resultsReleasedAt: { type: Date, default: null }
 });
 
 quizSchema.pre('save', function (next) {

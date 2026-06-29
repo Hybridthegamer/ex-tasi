@@ -3,10 +3,11 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Copy, Check, Eye, X, Edit, Trash2, BarChart2,
   Users, TrendingUp, AlertTriangle, Award,
-  ChevronLeft, ExternalLink, Flag, Download, FileText
+  ChevronLeft, ExternalLink, Flag, Download, FileText,
+  Send, Mail, CheckCircle, Lock
 } from 'lucide-react';
 import Navbar from '../../components/Navbar';
-import { quizAPI } from '../../services/api';
+import { quizAPI, submissionAPI } from '../../services/api';
 
 const fmt = (iso) => iso
   ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -21,10 +22,14 @@ export default function QuizDetails() {
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
-  const [copied, setCopied]     = useState(false);
-  const [closing, setClosing]   = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirm, setConfirm]   = useState(null);
+  const [copied, setCopied]           = useState(false);
+  const [closing, setClosing]         = useState(false);
+  const [deleting, setDeleting]       = useState(false);
+  const [confirm, setConfirm]         = useState(null);
+  const [showRelease, setShowRelease] = useState(false);
+  const [releasing, setReleasing]     = useState(false);
+  const [sendEmail, setSendEmail]     = useState(false);
+  const [releaseSuccess, setReleaseSuccess] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -53,6 +58,24 @@ export default function QuizDetails() {
     setDeleting(true);
     try { await quizAPI.delete(id); navigate('/tutor'); }
     catch { setError('Failed to delete quiz.'); setDeleting(false); }
+  };
+
+  const handleReleaseResults = async () => {
+    setReleasing(true);
+    try {
+      const res = await submissionAPI.releaseResults(id, { sendEmail });
+      setShowRelease(false);
+      const msg = sendEmail && res.emailsSent > 0
+        ? `Results released! ${res.emailsSent} student${res.emailsSent !== 1 ? 's' : ''} emailed.`
+        : 'Results released! Students can now view their scores.';
+      setReleaseSuccess(msg);
+      setTimeout(() => setReleaseSuccess(''), 6000);
+      load(); // refresh quiz data so releasedAt is shown
+    } catch (err) {
+      setError(err?.message || 'Failed to release results.');
+    } finally {
+      setReleasing(false);
+    }
   };
 
   const exportCSV = () => {
@@ -158,6 +181,14 @@ export default function QuizDetails() {
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 animate-fade-up">
 
+        {/* Success toast for result release */}
+        {releaseSuccess && (
+          <div className="mb-4 flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl px-4 py-3 animate-fade-in">
+            <CheckCircle size={18} className="text-green-500 shrink-0" />
+            <p className="text-sm font-semibold text-green-700">{releaseSuccess}</p>
+          </div>
+        )}
+
         <button onClick={() => navigate('/tutor')}
           className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-terracotta-500 font-semibold mb-5 transition-colors">
           <ChevronLeft size={16} /> Back to Dashboard
@@ -183,6 +214,12 @@ export default function QuizDetails() {
                 <span>·</span><span>Pass: {quiz.passingScore}%</span>
                 {quiz.duration && <><span>·</span><span>{quiz.duration} min/student</span></>}
                 {quiz.deadline && <><span>·</span><span>Due: {fmt(quiz.deadline)}</span></>}
+                <span>·</span>
+                {quiz.showResultsImmediately === false
+                  ? quiz.resultsReleasedAt
+                    ? <span className="text-green-600 flex items-center gap-1"><CheckCircle size={10} /> Results released {fmt(quiz.resultsReleasedAt)}</span>
+                    : <span className="text-violet-600 flex items-center gap-1"><Lock size={10} /> Results not yet released</span>
+                  : <span className="text-green-600">Results visible immediately</span>}
               </div>
             </div>
 
@@ -196,6 +233,19 @@ export default function QuizDetails() {
                 <Link to={`/tutor/quiz/${id}/monitor`} className="btn-secondary text-sm flex items-center gap-1.5">
                   <Eye size={14} /> Monitor
                 </Link>
+              )}
+              {/* Release Results — only show when showResultsImmediately is off and there are submissions */}
+              {quiz.showResultsImmediately === false && submissions.length > 0 && (
+                <button onClick={() => setShowRelease(true)}
+                  className={`text-sm flex items-center gap-1.5 px-3 py-2 rounded-2xl font-bold border transition-all ${
+                    quiz.resultsReleasedAt
+                      ? 'border-green-200 bg-green-50 text-green-700 hover:bg-green-100'
+                      : 'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100'
+                  }`}>
+                  {quiz.resultsReleasedAt
+                    ? <><CheckCircle size={14} /> Results Released</>
+                    : <><Send size={14} /> Release Results</>}
+                </button>
               )}
               {quiz.status === 'active' && (
                 <button onClick={() => setConfirm('close')}
@@ -349,6 +399,58 @@ export default function QuizDetails() {
                   className="flex-1 text-sm font-bold py-3 rounded-2xl text-white bg-red-500 hover:bg-red-600 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
                   {(closing || deleting) && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
                   {confirm === 'close' ? 'Close Quiz' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Release Results modal */}
+        {showRelease && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4 animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-warm-lg p-6 w-full max-w-sm">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center shrink-0">
+                  <Send size={18} className="text-violet-600" />
+                </div>
+                <h3 className="font-serif text-xl text-[var(--text)]">
+                  {quiz.resultsReleasedAt ? 'Re-release Results?' : 'Release Results?'}
+                </h3>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-5">
+                {quiz.resultsReleasedAt
+                  ? `Results were previously released. You can send emails again to all ${submissions.length} student${submissions.length !== 1 ? 's' : ''}.`
+                  : `This will make scores and feedback visible to all ${submissions.length} student${submissions.length !== 1 ? 's' : ''} who submitted this quiz.`}
+              </p>
+
+              {/* Email option */}
+              <label className="flex items-start gap-3 bg-violet-50 border border-violet-100 rounded-2xl px-4 py-3 mb-5 cursor-pointer hover:bg-violet-100 transition-colors">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-violet-600 w-4 h-4 shrink-0"
+                  checked={sendEmail}
+                  onChange={(e) => setSendEmail(e.target.checked)}
+                />
+                <div>
+                  <p className="text-sm font-bold text-violet-800 flex items-center gap-1.5">
+                    <Mail size={13} /> Also email students their results
+                  </p>
+                  <p className="text-xs text-violet-600 mt-0.5">
+                    Each student will receive a result summary with a link to view their full breakdown.
+                    Requires email to be configured on the server.
+                  </p>
+                </div>
+              </label>
+
+              <div className="flex gap-3">
+                <button onClick={() => setShowRelease(false)} className="btn-outline flex-1 text-sm">Cancel</button>
+                <button onClick={handleReleaseResults}
+                  disabled={releasing}
+                  className="flex-1 text-sm font-bold py-3 rounded-2xl text-white bg-violet-600 hover:bg-violet-700 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 transition-all">
+                  {releasing
+                    ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Releasing…</>
+                    : <><Send size={14} /> Release</>}
                 </button>
               </div>
             </div>

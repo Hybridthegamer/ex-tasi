@@ -174,14 +174,24 @@ export default function Results() {
   const { submissionId } = useParams();
   const location         = useLocation();
   const navigate         = useNavigate();
-  const [results, setResults] = useState(location.state?.results || null);
-  const [loading, setLoading] = useState(!location.state?.results);
-  const [error, setError]     = useState('');
+  const [results, setResults]               = useState(location.state?.results || null);
+  const [loading, setLoading]               = useState(!location.state?.results);
+  const [error, setError]                   = useState('');
+  const [resultsNotYetReleased, setNotYet]  = useState(false);
+  const [pendingQuizTitle, setPendingTitle] = useState('');
 
   useEffect(() => {
     if (results) return;
     submissionAPI.getResult(submissionId)
-      .then(setResults)
+      .then((data) => {
+        if (data?.resultsNotYetReleased) {
+          setNotYet(true);
+          setPendingTitle(data.quizTitle || '');
+          setResults(null);
+        } else {
+          setResults(data);
+        }
+      })
       .catch(() => setError('Could not load results.'))
       .finally(() => setLoading(false));
   }, [submissionId, results]);
@@ -212,11 +222,26 @@ export default function Results() {
   if (!results) return (
     <div className="min-h-screen bg-cream"><Navbar />
       <main className="max-w-3xl mx-auto px-4 py-12">
-        <div className="card text-center py-12">
-          <Clock size={36} className="text-violet-400 mx-auto mb-4" />
-          <h2 className="font-serif text-2xl text-[var(--text)] mb-2">Quiz Submitted!</h2>
-          <p className="text-sm text-[var(--text-muted)] mb-6">Your tutor will release results soon.</p>
-          <Link to="/student" className="btn-primary inline-flex items-center gap-2"><Home size={16} /> Back to Dashboard</Link>
+        <div className="card text-center py-14">
+          <div className="w-16 h-16 rounded-full bg-violet-50 flex items-center justify-center mx-auto mb-4">
+            <Clock size={32} className="text-violet-400" />
+          </div>
+          <h2 className="font-serif text-2xl text-[var(--text)] mb-2">
+            {resultsNotYetReleased ? 'Results Not Yet Released' : 'Quiz Submitted!'}
+          </h2>
+          {pendingQuizTitle && (
+            <p className="text-xs font-bold text-[var(--text-muted)] mb-2 uppercase tracking-wide">
+              {pendingQuizTitle}
+            </p>
+          )}
+          <p className="text-sm text-[var(--text-muted)] mb-6 max-w-xs mx-auto">
+            {resultsNotYetReleased
+              ? 'Your tutor has not released the results for this quiz yet. You will be able to view your score and feedback once they do.'
+              : 'Your quiz has been submitted. Your tutor will release results when they are ready.'}
+          </p>
+          <Link to="/student" className="btn-primary inline-flex items-center gap-2">
+            <Home size={16} /> Back to Dashboard
+          </Link>
         </div>
       </main>
     </div>

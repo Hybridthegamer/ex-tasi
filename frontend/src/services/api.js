@@ -46,14 +46,15 @@ export const quizAPI = {
 
 // ─── Submission ──────────────────────────────────────────────────────────────
 export const submissionAPI = {
-  start:       (quizId)         => api.post('/submission/start', { quizId }),
-  saveAnswer:  (id, data)       => api.put(`/submission/${id}/answer`, data),
-  submit:      (id, data)       => api.post(`/submission/${id}/submit`, data || {}),
-  getResult:   (id)             => api.get(`/submission/${id}/result`),
-  getHistory:  ()               => api.get('/submission/my/history'),
-  getByQuiz:   (quizId)         => api.get(`/submission/quiz/${quizId}`),
-  logProctor:  (id, data)       => api.post(`/submission/${id}/proctor`, data),
-  gradeAnswer: (id, data)       => api.put(`/submission/${id}/grade`, data),
+  start:          (quizId)         => api.post('/submission/start', { quizId }),
+  saveAnswer:     (id, data)       => api.put(`/submission/${id}/answer`, data),
+  submit:         (id, data)       => api.post(`/submission/${id}/submit`, data || {}),
+  getResult:      (id)             => api.get(`/submission/${id}/result`),
+  getHistory:     ()               => api.get('/submission/my/history'),
+  getByQuiz:      (quizId)         => api.get(`/submission/quiz/${quizId}`),
+  logProctor:     (id, data)       => api.post(`/submission/${id}/proctor`, data),
+  gradeAnswer:    (id, data)       => api.put(`/submission/${id}/grade`, data),
+  releaseResults: (quizId, data)   => api.post(`/submission/quiz/${quizId}/release`, data || {}),
 };
 
 // ─── Institution ─────────────────────────────────────────────────────────────
