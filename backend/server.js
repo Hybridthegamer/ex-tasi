@@ -4,7 +4,7 @@ const http       = require('http');
 const { Server } = require('socket.io');
 const cors       = require('cors');
 const compression  = require('compression');
-const rateLimit    = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const connectDB    = require('./config/db');
 
 // ── Database ──────────────────────────────────────────────────────────────────
@@ -51,14 +51,18 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
 
-// Strict limits on auth endpoints to block brute-force
+// Strict limits on auth endpoints to block brute-force.
+// Keyed by IP + email (not IP alone) so a whole classroom on one shared/NAT'd
+// IP doesn't get locked out of logging in together — only repeated failed
+// attempts against the *same* account count against the limit.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 20,
-  message: { message: 'Too many requests from this IP. Please try again later.' },
+  message: { message: 'Too many attempts for this account. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => `${ipKeyGenerator(req)}:${(req.body && req.body.email) || 'unknown'}`
 });
 
 // Generous limit for quiz/submission traffic (exam conditions)
@@ -73,7 +77,7 @@ const apiLimiter = rateLimit({
 });
 
 app.use('/api/auth', authLimiter);
-app.use('/api/', apiLimiter);
+app.use(['/api/quiz', '/api/submission', '/api/institution'], apiLimiter);
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',        require('./routes/auth'));
